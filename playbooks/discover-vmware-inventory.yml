@@ -1,0 +1,86 @@
+---
+# Phase 1 discovery: read-only inventory pull from vCenter for migration
+# planning (VMware -> Hyper-V / Azure Stack HCI).
+#
+# This playbook is read-only against vCenter. It creates no VMs, changes
+# no config, and only writes report files to the local ./reports directory.
+#
+# Usage:
+#   ansible-galaxy collection install -r requirements.yml
+#   pip install --user pyvmomi requests
+#   cp inventory/hosts.yml.example inventory/hosts.yml
+#   cp group_vars/all.yml.example group_vars/all.yml   # fill in real values
+#   ansible-vault encrypt_string 'YourPassword' --name 'vault_vcenter_password' >> group_vars/vault.yml
+#   ansible-playbook playbooks/discover-vmware-inventory.yml --ask-vault-pass
+
+- name: Discover VMware environment for migration planning
+  hosts: localhost
+  gather_facts: false
+  vars:
+    output_dir: "{{ playbook_dir }}/../reports"
+    report_timestamp: "{{ lookup('pipe', 'date +%Y%m%d-%H%M%S') }}"
+
+  tasks:
+    - name: Ensure reports directory exists
+      ansible.builtin.file:
+        path: "{{ output_dir }}"
+        state: directory
+        mode: '0750'
+
+    - name: Gather full VM inventory from vCenter
+      community.vmware.vmware_vm_info:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: "{{ vcenter_validate_certs | default(false) }}"
+        vm_type: all
+      register: vm_inventory
+      no_log: true   # avoid leaking hostnames/creds into CI or shared logs
+
+    - name: Gather cluster info (host count, capacity) for target sizing
+      community.vmware.vmware_cluster_info:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: "{{ vcenter_validate_certs | default(false) }}"
+      register: cluster_info
+      no_log: true
+
+    - name: Gather per-host facts (CPU/RAM for HCI sizing math)
+      community.vmware.vmware_host_facts:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: "{{ vcenter_validate_certs | default(false) }}"
+        esxi_hostname: "{{ item }}"
+      loop: "{{ esxi_hosts | default([]) }}"
+      register: host_facts
+      no_log: true
+      when: esxi_hosts is defined   # optional: set esxi_hosts: [] in group_vars if you want per-host detail
+
+    - name: Write full VM inventory as JSON (source of truth for wave planning)
+      ansible.builtin.copy:
+        content: "{{ vm_inventory.virtual_machines | to_nice_json }}"
+        dest: "{{ output_dir }}/vm-inventory-{{ report_timestamp }}.json"
+        mode: '0640'
+
+    - name: Write cluster capacity as JSON
+      ansible.builtin.copy:
+        content: "{{ cluster_info | to_nice_json }}"
+        dest: "{{ output_dir }}/cluster-capacity-{{ report_timestamp }}.json"
+        mode: '0640'
+
+    - name: Render CSV summary for migration wave planning
+      ansible.builtin.template:
+        src: templates/vm_inventory.csv.j2
+        dest: "{{ output_dir }}/vm-inventory-{{ report_timestamp }}.csv"
+        mode: '0640'
+
+    - name: Print summary
+      ansible.builtin.debug:
+        msg: >-
+          Discovered {{ vm_inventory.virtual_machines | length }} VMs.
+          Reports written to {{ output_dir }}.
+          NOTE: this captures config/capacity only, not IOPS/performance
+          history -- pull that separately from vCenter performance charts
+          or vROps before sizing Azure Stack HCI storage.

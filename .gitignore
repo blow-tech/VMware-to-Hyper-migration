@@ -1,0 +1,17 @@
+# Real environment data -- never commit these
+inventory/hosts.yml
+group_vars/all.yml
+group_vars/vault.yml
+reports/*
+!reports/.gitkeep
+
+# Ansible / Python
+*.retry
+.vault_pass
+*.pyc
+__pycache__/
+.ansible/
+
+# OS/editor noise
+.DS_Store
+*.swp

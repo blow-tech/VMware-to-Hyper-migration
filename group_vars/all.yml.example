@@ -1,0 +1,13 @@
+---
+# Copy this file to group_vars/all.yml (gitignored) and fill in real values
+# for your environment. NEVER commit group_vars/all.yml with real creds.
+
+vcenter_hostname: "vcenter.example.local"
+vcenter_username: "svc-ansible-readonly@vsphere.local"   # read-only service account, not your personal admin login
+vcenter_validate_certs: false                             # set true once you trust the vCenter cert chain
+
+# Never store the password in plaintext. Encrypt it with Ansible Vault:
+#   ansible-vault encrypt_string 'YourP@ssw0rd' --name 'vault_vcenter_password'
+# then paste the resulting block into group_vars/vault.yml (also gitignored)
+# and reference it here:
+vcenter_password: "{{ vault_vcenter_password }}"

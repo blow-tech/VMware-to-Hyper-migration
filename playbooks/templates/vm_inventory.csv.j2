@@ -1,0 +1,4 @@
+vm_name,power_state,cluster,esxi_host,vcpu,memory_mb,provisioned_storage_gb,ip_address,guest_os,folder,migration_wave,notes
+{% for vm in vm_inventory.virtual_machines %}
+{{ vm.guest_name | default(vm.guest.hostName, true) }},{{ vm.power_state | default('') }},{{ vm.cluster | default('') }},{{ vm.esxi_hostname | default('') }},{{ vm.allocated.cpu | default('') }},{{ vm.allocated.memory | default('') }},{{ vm.allocated.storage | default('') }},{{ vm.ip_address | default('') }},{{ vm.guest_fullname | default('') }},{{ vm.folder | default('') }},,
+{% endfor %}

@@ -1,0 +1,9 @@
+---
+collections:
+  - name: community.vmware
+    version: ">=3.0.0"
+  - name: community.general
+    version: ">=8.0.0"
+
+# Python dependency (install separately, not via ansible-galaxy):
+#   pip install --user pyvmomi requests
