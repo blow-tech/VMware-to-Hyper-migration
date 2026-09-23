@@ -1,0 +1,1 @@
+vmware_portgroup,vswitch_type,vlan_id,subnet,gateway,purpose,target_switch,target_vlan_id,trunk_confirmed_by_netteam,migration_wave,notes

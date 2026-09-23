@@ -1,16 +1,30 @@
-# VMware → Hyper-V / Azure Stack HCI Migration — Phase 1 Discovery
+# VMware → Hyper-V / Azure Stack HCI Migration Toolkit
 
-Read-only inventory pull from vCenter to seed migration-wave planning for a
-VMware → Hyper-V / Azure Stack HCI migration project. Contains **no real
-infrastructure data** — every credential/hostname is a placeholder you fill
-in locally, and those files are gitignored so they never get committed.
+Discovery, network, and storage planning templates for a VMware →
+Hyper-V / Azure Stack HCI migration project. Contains **no real
+infrastructure data** — every credential/hostname/WWPN is a placeholder
+you fill in locally, and those files are gitignored so they never get
+committed.
 
-Two equivalent implementations, use whichever fits your team:
-- `playbooks/discover-vmware-inventory.yml` — Ansible (community.vmware)
-- `scripts/Export-VMwareInventory.ps1` — PowerCLI
+## Project structure
 
-Both are **read-only** against vCenter: no VM creation, no config changes.
-They only write report files to `./reports/`.
+```
+├── playbooks/discover-vmware-inventory.yml   # Phase 1: Ansible VM/cluster discovery
+├── scripts/Export-VMwareInventory.ps1        # Phase 1: PowerCLI equivalent
+├── scripts/Export-FC-HBA-Info.ps1            # Phase 2: existing ESXi FC HBA reference export
+├── docs/network-vlan-mapping.md              # Phase 2: VMware portgroup -> Hyper-V SET switch mapping
+├── docs/storage-migration.md                 # Phase 2: FC SAN zoning vs vSAN vs Storage Spaces Direct
+├── templates/vlan-portgroup-mapping.csv       # fill in during network design
+├── templates/fc-zoning-worksheet.csv          # fill in if continuing FC SAN
+└── templates/storage-spaces-direct-sizing.csv # fill in if moving to S2D
+```
+
+All discovery tooling is **read-only** against vCenter: no VM creation, no
+config changes. Reports write to `./reports/` (gitignored).
+
+Read `docs/storage-migration.md` first if you're not sure whether your
+source environment is vSAN, FC SAN, or NFS — that decision changes
+whether the existing SAN is reusable at all.
 
 ## What this does NOT do
 - No IOPS/performance history — pull that separately from vCenter
@@ -71,7 +85,7 @@ Both paths write to `./reports/` (gitignored):
 > a quick `debug: var=vm_inventory` task) and adjust
 > `playbooks/templates/vm_inventory.csv.j2` if a field comes back empty.
 
-## Next steps after running this
+## Next steps after running Phase 1 discovery
 
 1. Open the CSV, fill in `migration_wave` per VM based on dependency
    chains (app servers move with their DB in the same wave)
@@ -80,7 +94,21 @@ Both paths write to `./reports/` (gitignored):
 3. Pull IOPS baselines from vCenter/vROps separately — this tool doesn't
    capture them
 4. Feed the VM list into the AD/DNS/DHCP migration runbook (handled
-   separately — see project notes, DCs are rebuilt fresh, not migrated)
+   separately — DCs are rebuilt fresh, not migrated)
+
+## Phase 2 — Network and storage design
+
+Once discovery is done:
+
+1. **`docs/network-vlan-mapping.md`** — pull existing VMware
+   portgroups/VLANs, map each to a target Hyper-V SET switch VLAN,
+   get network team sign-off before the first migration wave
+2. **`docs/storage-migration.md`** — determine whether source storage is
+   vSAN (no reuse possible, VM-level migration only), FC SAN (array is
+   often reusable, re-zone to new hosts), or NFS. Then either fill in
+   `templates/fc-zoning-worksheet.csv` or
+   `templates/storage-spaces-direct-sizing.csv` depending on the target
+   decision
 
 ## Publishing this to your own GitHub
 
