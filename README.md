@@ -1,125 +1,129 @@
 # VMware → Hyper-V / Azure Stack HCI Migration Toolkit
 
-Discovery, network, and storage planning templates for a VMware →
-Hyper-V / Azure Stack HCI migration project. Contains **no real
-infrastructure data** — every credential/hostname/WWPN is a placeholder
-you fill in locally, and those files are gitignored so they never get
-committed.
+A practical, field-tested structure for migrating a mid-size VMware
+environment to Hyper-V or Azure Stack HCI — discovery, network and
+storage design, backup validation, wave tracking, and decommission,
+each with real templates and read-only automation, not just prose.
 
-## Project structure
+Built around a **4-6 host, 20-30 VM** environment (including Active
+Directory domain controllers), but the methodology scales either
+direction.
+
+**Start here → [`docs/00-migration-overview.md`](docs/00-migration-overview.md)**
+— the phase-by-phase guide that ties every doc and template below
+together, including a diagram of how the phases gate each other.
+
+## Why this exists
+
+Most migration guidance is either a vendor whitepaper (sells you their
+platform) or a checklist with no artifacts (tells you *what* to check,
+not how to produce or track the evidence). This repo tries to close that
+gap: every phase produces something concrete — a filled CSV, a passed
+checklist, a proven restore — that the next phase depends on.
+
+## Contains no real infrastructure data
+
+Every credential, hostname, VLAN ID, and WWPN in this repo is a
+placeholder. Real values go in files that are gitignored
+(`group_vars/all.yml`, `inventory/hosts.yml`, `reports/*`, filled-in
+templates if you choose to keep them local) — copy the `.example` files
+and never commit the real ones.
+
+## Repo structure
 
 ```
-├── playbooks/discover-vmware-inventory.yml   # Phase 1: Ansible VM/cluster discovery
-├── scripts/Export-VMwareInventory.ps1        # Phase 1: PowerCLI equivalent
-├── scripts/Export-FC-HBA-Info.ps1            # Phase 2: existing ESXi FC HBA reference export
-├── docs/network-vlan-mapping.md              # Phase 2: VMware portgroup -> Hyper-V SET switch mapping
-├── docs/storage-migration.md                 # Phase 2: FC SAN zoning vs vSAN vs Storage Spaces Direct
-├── templates/vlan-portgroup-mapping.csv       # fill in during network design
-├── templates/fc-zoning-worksheet.csv          # fill in if continuing FC SAN
-└── templates/storage-spaces-direct-sizing.csv # fill in if moving to S2D
+├── docs/
+│   ├── 00-migration-overview.md      # START HERE — phase index + methodology
+│   ├── network-vlan-mapping.md       # VMware portgroup -> Hyper-V SET switch
+│   ├── storage-migration.md          # vSAN vs FC SAN vs Storage Spaces Direct
+│   ├── backup-validation.md          # Veeam proxy redesign, prove restores work
+│   ├── pre-cutover-checklist.md      # per-wave gate: network/storage/licensing/rollback
+│   └── decommission-checklist.md     # retiring the old VMware environment
+├── playbooks/
+│   └── discover-vmware-inventory.yml # Ansible: read-only VM/cluster discovery
+├── scripts/
+│   ├── Export-VMwareInventory.ps1    # PowerCLI equivalent of the above
+│   └── Export-FC-HBA-Info.ps1        # existing ESXi FC HBA reference export
+├── templates/
+│   ├── vlan-portgroup-mapping.csv
+│   ├── fc-zoning-worksheet.csv
+│   ├── storage-spaces-direct-sizing.csv
+│   └── migration-wave-tracker.csv    # ties VM + network + storage + gate status per wave
+├── inventory/hosts.yml.example
+├── group_vars/all.yml.example
+└── requirements.yml                  # Ansible collections
 ```
 
-All discovery tooling is **read-only** against vCenter: no VM creation, no
-config changes. Reports write to `./reports/` (gitignored).
+## Quick start
 
-Read `docs/storage-migration.md` first if you're not sure whether your
-source environment is vSAN, FC SAN, or NFS — that decision changes
-whether the existing SAN is reusable at all.
+1. Read [`docs/00-migration-overview.md`](docs/00-migration-overview.md) for the full phase map
+2. Run Phase 1 discovery (Ansible or PowerCLI — pick one, both produce
+   the same reports) — see **Discovery** below
+3. Work through Phase 2 network and storage design docs, filling in the
+   templates as you go
+4. Use `templates/migration-wave-tracker.csv` to plan and track waves,
+   gated by `docs/pre-cutover-checklist.md` per wave
+5. Validate backups (`docs/backup-validation.md`) before the first VM
+   with real data moves
+6. When fully migrated and soaked, work through
+   `docs/decommission-checklist.md`
 
-## What this does NOT do
-- No IOPS/performance history — pull that separately from vCenter
-  performance charts or vROps before sizing Azure Stack HCI storage
-- No application dependency mapping — that's a manual/discovery-tool step
-  (or add one later, e.g. via a network flow tool)
-- No VLAN/portgroup mapping — build that spreadsheet by hand against the
-  cluster report this produces
+AD/DNS/DHCP cutover is intentionally a separate project/repo — see the
+note in the overview doc for why.
 
-## Prerequisites
+## Discovery — read-only, both paths equivalent
 
-**Ansible path:**
+**Ansible:**
 ```bash
 ansible-galaxy collection install -r requirements.yml
 pip install --user pyvmomi requests
-```
 
-**PowerCLI path:**
-```powershell
-Install-Module VMware.PowerCLI -Scope CurrentUser
-Set-PowerCLIConfiguration -InvalidCertificateAction Ignore -Confirm:$false  # only if using self-signed certs
-```
-
-Use a **read-only vCenter service account**, not a personal admin login.
-
-## Setup (Ansible)
-
-```bash
 cp inventory/hosts.yml.example inventory/hosts.yml
-cp group_vars/all.yml.example group_vars/all.yml
-# edit group_vars/all.yml with your real vcenter_hostname / vcenter_username
-
-# encrypt the vCenter password instead of storing it in plaintext
+cp group_vars/all.yml.example group_vars/all.yml   # fill in real vcenter_hostname / username
 ansible-vault encrypt_string 'YourPassword' --name 'vault_vcenter_password' >> group_vars/vault.yml
 
 ansible-playbook playbooks/discover-vmware-inventory.yml --ask-vault-pass
 ```
 
-## Setup (PowerCLI)
-
+**PowerCLI:**
 ```powershell
+Install-Module VMware.PowerCLI -Scope CurrentUser
 ./scripts/Export-VMwareInventory.ps1 -vCenterServer vcenter.example.local -OutputPath ./reports
-# prompts for credentials interactively -- never hardcoded
 ```
 
-## Output
+Both write to `./reports/` (gitignored): a full-fidelity JSON dump plus a
+wave-planning-friendly CSV (VM specs, cluster, host, IP, empty
+`migration_wave`/`notes` columns) and a cluster capacity report for
+target sizing.
 
-Both paths write to `./reports/` (gitignored):
-- `vm-inventory-<timestamp>.csv` — one row per VM: vCPU, RAM, provisioned
-  storage, cluster, host, IP, guest OS, plus empty `migration_wave` /
-  `notes` columns to fill in during planning
-- `vm-inventory-<timestamp>.json` — full-fidelity dump, source of truth
-- `cluster-capacity-<timestamp>.csv` / `.json` — host count, aggregate
-  CPU/RAM per cluster, for target sizing math
+Use a **read-only vCenter service account**, not a personal admin login.
 
-> Note: the exact field names returned by `community.vmware.vmware_vm_info`
-> can shift slightly between collection versions. Run once with `-vvv` (or
-> a quick `debug: var=vm_inventory` task) and adjust
-> `playbooks/templates/vm_inventory.csv.j2` if a field comes back empty.
+> Field names returned by `community.vmware.vmware_vm_info` can shift
+> slightly between collection versions — if a CSV column comes back
+> empty, check with `-vvv` and adjust `playbooks/templates/vm_inventory.csv.j2`.
 
-## Next steps after running Phase 1 discovery
+## What this toolkit deliberately does not cover
 
-1. Open the CSV, fill in `migration_wave` per VM based on dependency
-   chains (app servers move with their DB in the same wave)
-2. Cross-reference `cluster-capacity` output against Azure Stack HCI HCL
-   sizing before ordering hardware
-3. Pull IOPS baselines from vCenter/vROps separately — this tool doesn't
-   capture them
-4. Feed the VM list into the AD/DNS/DHCP migration runbook (handled
-   separately — DCs are rebuilt fresh, not migrated)
+- **IOPS/performance history** — pull from vCenter performance charts or
+  vROps separately before sizing Azure Stack HCI storage
+- **Application dependency mapping** — use a network flow tool or manual
+  interviews; feed the result into the wave tracker's `dependency_group` column
+- **AD/DNS/DHCP cutover runbook** — separate repo by design; DCs are
+  rebuilt fresh on the target platform, never P2V'd
 
-## Phase 2 — Network and storage design
+## Contributing / adapting this for your own migration
 
-Once discovery is done:
+This is meant to be forked and adapted, not used verbatim. The
+`.example` files and empty-header CSV templates are the actual interface
+— copy them, fill them with your environment's real data, and keep the
+real files out of version control (or push to a **private** repo if your
+org wants the filled-in artifacts tracked).
 
-1. **`docs/network-vlan-mapping.md`** — pull existing VMware
-   portgroups/VLANs, map each to a target Hyper-V SET switch VLAN,
-   get network team sign-off before the first migration wave
-2. **`docs/storage-migration.md`** — determine whether source storage is
-   vSAN (no reuse possible, VM-level migration only), FC SAN (array is
-   often reusable, re-zone to new hosts), or NFS. Then either fill in
-   `templates/fc-zoning-worksheet.csv` or
-   `templates/storage-spaces-direct-sizing.csv` depending on the target
-   decision
+If you find a gap running this against a real migration, the
+[`docs/decommission-checklist.md`](docs/decommission-checklist.md) retro
+step exists specifically to feed lessons back into a repo like this one
+for the next migration.
 
-## Publishing this to your own GitHub
+## License
 
-This repo has been `git init`'d locally with an initial commit. To push it
-to your own GitHub:
-
-```bash
-git remote add origin git@github.com:<your-org>/vmware-to-hyperv-migration.git
-git branch -M main
-git push -u origin main
-```
-
-(Create the empty repo on GitHub first, without a README/license, so there's
-no merge conflict on first push.)
+MIT — see [`LICENSE`](LICENSE). Use it, fork it, adapt it.
