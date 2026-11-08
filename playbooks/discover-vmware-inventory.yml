@@ -18,9 +18,12 @@
   gather_facts: false
   vars:
     output_dir: "{{ playbook_dir }}/../reports"
-    report_timestamp: "{{ lookup('pipe', 'date +%Y%m%d-%H%M%S') }}"
 
   tasks:
+    - name: Capture one report timestamp for all files
+      ansible.builtin.set_fact:
+        report_timestamp: "{{ lookup('pipe', 'date -u +%Y%m%dT%H%M%S%N') }}"
+
     - name: Ensure reports directory exists
       ansible.builtin.file:
         path: "{{ output_dir }}"
@@ -32,7 +35,7 @@
         hostname: "{{ vcenter_hostname }}"
         username: "{{ vcenter_username }}"
         password: "{{ vcenter_password }}"
-        validate_certs: "{{ vcenter_validate_certs | default(false) }}"
+        validate_certs: "{{ vcenter_validate_certs | default(true) }}"
         vm_type: all
       register: vm_inventory
       no_log: true   # avoid leaking hostnames/creds into CI or shared logs
@@ -42,7 +45,7 @@
         hostname: "{{ vcenter_hostname }}"
         username: "{{ vcenter_username }}"
         password: "{{ vcenter_password }}"
-        validate_certs: "{{ vcenter_validate_certs | default(false) }}"
+        validate_certs: "{{ vcenter_validate_certs | default(true) }}"
       register: cluster_info
       no_log: true
 
@@ -51,7 +54,7 @@
         hostname: "{{ vcenter_hostname }}"
         username: "{{ vcenter_username }}"
         password: "{{ vcenter_password }}"
-        validate_certs: "{{ vcenter_validate_certs | default(false) }}"
+        validate_certs: "{{ vcenter_validate_certs | default(true) }}"
         esxi_hostname: "{{ item }}"
       loop: "{{ esxi_hosts | default([]) }}"
       register: host_facts

@@ -1,3 +1,5 @@
+> **Pending safety remediation:** read [REMEDIATION-2026-11.md](REMEDIATION-2026-11.md) before using deployment or collection examples. No production validation is implied.
+
 # VMware → Hyper-V / Azure Stack HCI Migration Toolkit
 
 A practical, field-tested structure for migrating a mid-size VMware
