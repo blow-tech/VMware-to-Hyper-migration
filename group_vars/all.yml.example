@@ -4,7 +4,7 @@
 
 vcenter_hostname: "vcenter.example.local"
 vcenter_username: "svc-ansible-readonly@vsphere.local"   # read-only service account, not your personal admin login
-vcenter_validate_certs: false                             # set true once you trust the vCenter cert chain
+vcenter_validate_certs: true                             # set true once you trust the vCenter cert chain
 
 # Never store the password in plaintext. Encrypt it with Ansible Vault:
 #   ansible-vault encrypt_string 'YourP@ssw0rd' --name 'vault_vcenter_password'

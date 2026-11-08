@@ -1,0 +1,15 @@
+name: Isolated discovery validation
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  fixtures:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Windows PowerShell fixtures
+        shell: powershell
+        run: ./tests/Validate-Discovery.ps1
+      - name: PowerShell 7 fixtures
+        shell: pwsh
+        run: ./tests/Validate-Discovery.ps1
